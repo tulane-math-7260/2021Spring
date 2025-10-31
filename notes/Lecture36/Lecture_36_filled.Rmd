@@ -1,0 +1,228 @@
+---
+title: "Lecture 36: Lab session"
+author: "Dr. Xiang Ji @ Tulane University"
+date: "April 23, 2021"
+output:
+  html_document:
+    toc: true
+    toc_depth: 4  
+subtitle: MATH-6040/7260 Linear Models
+csl: ../apa.csl
+---
+\newcommand{\distas}[1]{\overset{#1}{\sim}}%
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls()) # clean-up workspace
+library(tidyverse)
+```
+
+## Reference
+
+We consider the `Machines` and `Cheese` examples in Lukas Meier's [Lecture notes](https://stat.ethz.ch/~meier/teaching/anova/random-and-mixed-effects-models.html#example-machines-data)
+
+## Q1 Machines example
+
+We start with the data set `Machines` from the package `nlme` (as in Lukas's notes).
+As stated in the help file: “Data on an experiment to compare three brands of machines used in an industrial process are presented in Milliken and Johnson (p. 285, 1992). Six workers were chosen randomly among the employees of a factory to operate each machine three times. The response is an overall productivity score taking into account the number and quality of components produced.”
+
+```{r}
+data("Machines", package = "nlme")
+## technical detail for nicer output:
+Machines[, "Worker"] <- factor(Machines[, "Worker"], levels = 1:6, ordered = FALSE)
+str(Machines, give.attr = FALSE) ## give.attr in order to shorten output
+```
+
+Let us first visualize the data (`R` code for interested readers only).
+
+```{r}
+ggplot(Machines, aes(x = Machine, y = score, group = Worker, col = Worker)) + 
+  geom_point() + stat_summary(fun.y = mean, geom = "line")
+```
+
+We observe that productivity is largest on machine $C$, followed by $B$ and $A$. 
+Most workers show a similar “profile,” with the exception of worker 6 who performs badly on machine $B$.
+
+Let us now model this data.
+We assume that there is a population machine effect (think of an average “profile”), but each worker is allowed to have its own (random) deviation.
+$$
+Y_{ijk} = \mu + \alpha_i + B_j + (\alpha B)_{ij} + \epsilon_{ijk}
+$$
+where $Y_{ijk}$ denotes the $k$th productivity score of worker $j$ on machine $i$. (Note that we use $B$ for the random-effect of worker here which is different in the notes.)
+
+We assume the worker and the interaction random-effects are normally distributed
+$$
+B_j \distas{iid} \mathcal{N}(0, \sigma_\beta^2), \; (\alpha B)_{ij} \distas{iid} \mathcal{N}(0, \sigma^2_{\alpha B}).
+$$
+
+### Q1a What is the covariance of productivity score the same worker gets between different operations using the same machine, i.e. $\mbox{Cov}(Y_{ijk}, Y_{ijl})$ for $k \ne l$?
+
+$$
+\begin{aligned}
+\mbox{Cov}(Y_{ijk}, Y_{ijl}) &= \mbox{Cov}(B_j + (\alpha B)_{ij} + \epsilon_{ijk}, B_j + (\alpha B)_{ij} + \epsilon_{ijl})\\
+&= \mbox{Var}(B_j + (\alpha B)_{ij})\\
+&= \sigma_\beta^2 + \sigma^2_{\alpha B}\\
+\end{aligned}
+$$
+
+### Q1b What is the covariance of productivity score of the same worker using different machines, i.e. $\mbox{Cov}(Y_{ijk}, Y_{ljm})$ for $i \ne l$?
+
+$$
+\begin{aligned}
+\mbox{Cov}(Y_{ijk}, Y_{ljm}) &= \mbox{Cov}(B_j + (\alpha B)_{ij} + \epsilon_{ijk}, B_j + (\alpha B)_{lj} + \epsilon_{ljm})\\
+&= \mbox{Var}(B_j)\\
+&= \sigma_\beta^2\\
+\end{aligned}
+$$
+We could use the `lme4` package to fit such a model. We want to have
+
+- a random effect $B_j$ per worker: `(1 | Worker)`
+
+- a random effect $(\alpha B)_{ij}$ per combination of worker and machine: `(1 | Worker:Machine)`
+
+Hence, the `lmer` call would look like this
+
+```{r}
+library(lme4)
+fit <- lmer(score ~ Machine + (1 | Worker) + (1 | Worker:Machine), data = Machines)
+```
+
+As `lme4` does not calculate p-values for the fixed effects, we use the package `lmerTest` instead.
+Technically speaking, it is nothing else than a wrapper for the same function in package `lme4` but with modified outputs which include p-values.
+
+```{r}
+options(contrasts = c("contr.treatment", "contr.poly"))
+library(lmerTest)
+fit <- lmer(score ~ Machine + (1 | Worker) + (1 | Worker:Machine), data = Machines)
+```
+
+
+We get the ANOVA table with the function `anova`.
+
+```{r}
+anova(fit)
+```
+
+### Q1c For the ANOVA table above, we get a numerator df of $2$ and a denominator degree of freedom of $10$, why is the denominator degree of freedom so small?
+
+For mixed-effects model, we test the main effect by using $F_A = \frac{MS[A]}{MS[AB]}$.  The $df = 10$ comes from the interaction df.
+
+### Q1d Finish the df table below
+
+|Source| df | (F)ixed/(R)andom |
+|:----:|:--:|:-----:|
+|Machine| | |
+|Worker | | |
+|Machine x Worker | | |
+|Error | | |
+|Total | | |
+
+
+|Source| df | (F)ixed/(R)andom |
+|:----:|:--:|:----------:|
+|Machine| 2 | F |
+|Worker | 5 | R |
+|Machine x Worker | 10 | R |
+|Error | 36 | R |
+|Total | 53 | |
+
+Now take a look over the `summary`
+```{r}
+summary(fit)
+```
+
+### Q1e How do you interprete The estimate of `MachineB` = 7.967?
+
+The productivity score on machine $B$ is $7.967$ larger than machine $A$ on average (because it affects the mean of the response).
+
+
+----------------------------------------------------------------------------------------------------
+
+## Q2 Cheese data example 
+
+Now we continue with the Cheese data set example.
+A group of 10 “rural” and 10 “urban” raters rated 4 different cheese types ($A, B, C, D$).
+Every rater got to eat two samples from the same cheese type in random order.
+Hence, we have a total of $20 \times 4 \times 2 = 160$ observations.
+
+```{r}
+cheese <- read.table("http://stat.ethz.ch/~meier/teaching/data/cheese.dat", header = TRUE)
+cheese[, "rater"] <- factor(cheese[, "rater"])
+str(cheese)
+```
+
+Note that the factor `rater` has only 10 levels.
+We have to be careful here and should not forget that rater is actually nested in background (so, the raters labeled “1” in the urban and the rural group have nothing in common).
+
+We can easily visualize this data with an interaction plot.
+We use the package `ggplot2` to get a more appealing plot compared to the function `interaction` (R code for interested readers only).
+
+```{r}
+ggplot(cheese, aes(x = cheese, y = y, group = interaction(background, rater), 
+                   color = background)) + stat_summary(fun.y = mean, geom = "line")
+```
+
+We treat background and cheese type as fixed-effects, and treat rater as random effect nested in background.
+The interaction between cheese type and rater is also a random effect.
+
+$$
+Y_{ijkl} = \mu + \alpha_i + \beta_j + (\alpha \beta)_{ij} + C_{k(i)} + (\beta C)_{jk(i)} + \epsilon_{ijkl}
+$$
+
+We can fit the model using 
+
+```{r}
+library(lmerTest)
+fit <- lmer(y ~ background * cheese + (1 | rater:background) + 
+              (1 | rater:background:cheese), data = cheese)
+```
+
+And get an ANOVA table with p-value for the fixed effects with the function `anova`.
+
+```{r}
+anova(fit)
+```
+
+### Q2a Finish the df table below
+
+|Source|df| (F)ixed/(R)andom|
+|:----:|:--:|:-----:|
+|Background |  | |
+|Cheese type |  |  |
+|Background $\times$ Cheese type | | |
+|Rater | | |
+|Rater $\times$ Background | | |
+|Error | | |
+|Total | | |
+
+|Source|df| (F)ixed/(R)andom|
+|:----:|:--:|:-----:|
+|Background | 1 | F |
+|Cheese type | 3 | F |
+|Background $\times$ Cheese type | 3 | F |
+|Rater | 18 | R |
+|Rater $\times$ Background | 54 | R |
+|Error | 80 | R |
+|Total | 159 | |
+
+### Q2b Now explain the dfs for each of the $F$-statistic associated with each fixed effect.
+
+- Numerator df always comes from the df of the fixed effect.
+
+- Denominator df comes from the $MS$ used in the denominator of the $F$ ratio.
+
+  - For fixed-effect Background, because rater is nested in Background, the denominator for Background is from the mean square of `rater`, so 18
+  
+  - For fixed-effect cheese type, the denominator is $MS[E]$ with df of 54.
+  
+  - For fixed-effect Background x Cheese type, the denominator is $MS[E]$ with df of 54.
+  
+We can take a look of the summary at the end.
+
+```{r}
+summary(fit)
+```
+
+
+
+

@@ -1,0 +1,71 @@
+---
+title: "Lecture9"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+Figure 3.18
+
+```{r}
+prestige.data <- read.table("./Duncan.txt")
+
+pairs(prestige.data[, c("income", "education", "prestige")])
+
+library(GGally)
+prestige.df <- tibble(prestige.data)
+ggpairs(data = prestige.df, columns = c("income", "education", "prestige"))
+```
+
+-------------------------------------
+
+
+Construct X, X'X, etc
+
+```{r}
+X <- as.matrix(cbind(1, prestige.data[, c(2, 3)]))
+t(X) %*% X
+solve(t(X) %*% X)
+Y <- as.matrix(prestige.data[, "prestige"])
+beta.estimate <- solve(crossprod(X), crossprod(X, Y))
+beta.estimate
+sse <- crossprod(Y - X %*% beta.estimate)
+sse
+mse <- sse / (45 - 2 - 1)
+mse
+sigma.matrix <- as.numeric(mse) * solve(t(X) %*% X)
+sigma.matrix
+```
+
+t(0.025, 42) critical value:
+
+```{r}
+qt(1.0 - 0.025, 42) #take a look at the documentation of "qt"
+# t statistic
+beta.estimate[2] / sqrt(sigma.matrix[2, 2])
+```
+
+Mean prestige estimate given income = 42 and education = 84:
+
+```{r}
+a.vector <- c(1, 42, 84)
+mean.prestige.est <- a.vector %*% beta.estimate
+mean.prestige.est
+```
+
+standard error:
+
+```{r}
+theta.se <- sqrt(crossprod(a.vector, sigma.matrix %*% a.vector))
+theta.se
+```
+
+95% confidence interval:
+
+```{r}
+confidence.interval <- 64.9 + c(-1, 1) *  2.02 * 3.67
+confidence.interval
+```

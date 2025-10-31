@@ -1,0 +1,91 @@
+---
+title: "Lecture 30: Lab session"
+author: "Dr. Xiang Ji @ Tulane University"
+date: "April 9, 2021"
+output:
+  html_document:
+    toc: true
+    toc_depth: 4  
+subtitle: MATH-6040/7260 Linear Models
+csl: ../apa.csl
+---
+
+## Reference
+
+[ANCOVA example blog](https://www.r-bloggers.com/2019/04/ancova-example-april-18-2019/)
+
+
+## ANCOVA example
+
+Let's consider the `diamonds` dataset from `ggplot2` package.
+
+Let’s say for the sake of argument you’d like to know more about how these factors of `cut` and `color` impact the `price` you’ll pay.
+Let’s go ahead and get things set up in R so we can proceed, load the right libraries etc.. 
+
+```{r}
+library(tidyverse)
+str(diamonds)
+```
+
+We follow the blog to process the data into a balanced design.
+
+```{r}
+set.seed(1234)
+diamonds2 <- filter(diamonds, 
+                    cut %in% c("Fair", "Good") & 
+                    color %in% c("E", "F", "G") & 
+                    carat < 1.75) 
+diamonds2 <- droplevels(diamonds2)
+one <- diamonds2 %>% filter(cut == "Fair" & color == "E") %>% sample_n(218)
+two <- diamonds2 %>% filter(cut == "Fair" & color == "F") %>% sample_n(218)
+three <- diamonds2 %>% filter(cut == "Fair" & color == "G") %>% sample_n(218)
+four <- diamonds2 %>% filter(cut == "Good" & color == "E") %>% sample_n(218)
+five <- diamonds2 %>% filter(cut == "Good" & color == "F") %>% sample_n(218)
+six <- diamonds2 %>% filter(cut == "Good" & color == "G") %>% sample_n(218)
+diamonds2 <- bind_rows(one, two, three, four, five, six)
+str(diamonds2)
+```
+
+### Two-way ANOVA model
+
+Now let's do a two-way ANOVA with `price` as the response and a cross design over `cut` and `color` (in other words, consider both the main effects of `cut` and `color` and their interaction effect).
+
+Print out your ANOVA table
+
+
+#### Is the interaction effect significant at $\alpha=0.05$ level?
+
+
+#### Is the main-effect `cut` significant at $\alpha=0.05$ level?
+
+#### Is the main-effect `color` significant at $\alpha=0.05$ level?
+
+
+### Just looking at `carat`
+
+Based on common sense, we want to control over the weight of the diamond by including `carat` as a covariate into our model.
+
+Before fitting the model, let's simply look at the relationship between `price` and `carat` by making a plot.
+
+```{r}
+ggplot(diamonds2, aes(x = carat, y= price)) + 
+  geom_point(alpha = 1/10) + 
+  geom_smooth(method = "loess", color = "red") + 
+  geom_smooth(method = "lm", color = "blue")
+```
+
+#### What is the blue line in the above plot?  What is the red line in the plot?
+
+
+### Adding `carat` into the model
+
+Use `price` as the response variable, `cut` and `color` as two main-effects with their interaction, and `carat` as a covariate.
+Print out the ANOVA table (use the `Anova` function from the `car` package with argument `type = 2` to get type II sum of squares).
+
+```{r, eval = FALSE}
+two.way.ancova <- aov()
+car::Anova(two.way.ancova, type = 2)
+```
+
+#### Are any of the effects significant now? Why?
+
